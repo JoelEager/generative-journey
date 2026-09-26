@@ -1,14 +1,16 @@
 from typing import Optional
 import anthropic
 
-from generative_journey.ai import BaseAIClient
+from generative_journey.ai_clients import BaseAIClient
 
 
 class AnthropicClient(BaseAIClient):
     """AI client using Anthropic API SDK."""
 
-    def __init__(self, model: str, api_key: Optional[str] = None):
-        super().__init__(model)
+    provider_name: str = "anthropic"
+
+    def __init__(self, model: str = "claude-3-5-sonnet-20241022", api_key: Optional[str] = None):
+        super().__init__(model=model)
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:

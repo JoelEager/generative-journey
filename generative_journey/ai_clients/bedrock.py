@@ -1,15 +1,16 @@
-import json
 from typing import Optional
 import boto3
 
-from generative_journey.ai import BaseAIClient
+from generative_journey.ai_clients import BaseAIClient
 
 
 class BedrockClient(BaseAIClient):
     """AI client using AWS Bedrock runtime (boto3) Converse API."""
 
-    def __init__(self, model: str, region_name: Optional[str] = None):
-        super().__init__(model)
+    provider_name: str = "bedrock"
+
+    def __init__(self, model: str = "amazon.nova-pro-v1:0", region_name: Optional[str] = None):
+        super().__init__(model=model)
         self.client = boto3.client("bedrock-runtime", region_name=region_name)
 
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
