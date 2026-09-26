@@ -4,5 +4,5 @@ from .openai import OpenAIClient
 class LocalClient(OpenAIClient):
     provider_name: str = "local"
 
-    def __init__(self, **_):
-        super().__init__(model="default", api_key="placeholder", base_url="http://localhost:1234/v1")
+    def __init__(self, model=None, **kwargs):
+        super().__init__(model=model or "default", api_key="placeholder", base_url="http://localhost:1234/v1")

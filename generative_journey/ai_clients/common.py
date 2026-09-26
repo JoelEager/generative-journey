@@ -1,6 +1,9 @@
 """Shared implementation for AI clients."""
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List, Optional, Any
+
+MAX_INVOCATIONS = 3
+
 
 class BaseAIClient(ABC):
     """Abstract base client interface for AI storytelling interaction."""
@@ -14,11 +17,11 @@ class BaseAIClient(ABC):
         return f"provider: {self.provider_name}, model: {self.model}"
 
     @abstractmethod
-    def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """Generates a text response from the underlying AI model.
+    def generate_actions(self) -> List[Any]:
+        """Generates a list of action objects (NarrativeMessage, VerboseMessage, EndGame) for the turn.
 
-        :param prompt: User prompt input.
-        :param system_prompt: Optional system prompt or persona instructions.
-        :return: Generated string response.
+        Reads current prompt state from generative_journey.ai_prompt and updates client message history.
+
+        :return: List of action instances.
         """
         pass

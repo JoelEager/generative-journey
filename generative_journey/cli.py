@@ -2,7 +2,9 @@
 from traceback import format_exc
 import click
 
-from .ai_clients import get_ai_client
+from generative_journey import ai_prompt
+from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from generative_journey.ai_clients import get_ai_client
 
 
 def fatal_error(message: str):
@@ -14,7 +16,8 @@ def fatal_error(message: str):
 @click.command(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.argument("provider")
 @click.option("-m", "--model", help="AI model name override.")
-def main(provider, model):
+@click.option("-v", "--verbose", is_flag=True, help="Display verbose AI messages (thinking, warnings, etc.).")
+def main(provider, model, verbose):
     """
     Play a game of Generative Journey with the specified AI. See the readme for information on supported providers and models.
     """
@@ -30,13 +33,34 @@ def main(provider, model):
     except Exception:
         fatal_error("Failed to initialize AI client")
 
-    try:
-        click.echo(f"Welcome to Generative Journey! ({client})")
-        prompt = "Introduce a mystical adventure game setting in two evocative sentences."
-        response = client.generate_response(prompt)
-        click.echo(f"\nAI Response:\n{response}")
-    except Exception:
-        fatal_error("Failure during AI interaction")
+    click.echo(f"Welcome to Generative Journey! ({client})\n")
+    ai_prompt.PLAYER_MESSAGE = ""
+
+    game_over = False
+
+    while not game_over:
+        try:
+            actions = client.generate_actions()
+        except Exception:
+            fatal_error("Failure during AI interaction")
+
+        for action in actions:
+            if isinstance(action, VerboseMessage):
+                if verbose:
+                    click.echo(str(action))
+            elif isinstance(action, NarrativeMessage):
+                click.echo(str(action))
+            elif isinstance(action, EndGame):
+                game_over = True
+                if action.won:
+                    click.secho("\n*** VICTORY! You won the game! ***", fg="green", bold=True)
+                else:
+                    click.secho("\n*** GAME OVER! You lost the game! ***", fg="red", bold=True)
+
+        if game_over:
+            break
+
+        ai_prompt.PLAYER_MESSAGE = click.prompt("\nYour action")
 
 
 if __name__ == "__main__":
