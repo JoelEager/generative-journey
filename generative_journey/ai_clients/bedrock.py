@@ -1,17 +1,18 @@
+"""AI client using AWS Bedrock runtime (boto3) Converse API."""
 from typing import Optional
-import boto3
 
 from generative_journey.ai_clients import BaseAIClient
 
 
 class BedrockClient(BaseAIClient):
-    """AI client using AWS Bedrock runtime (boto3) Converse API."""
-
     provider_name: str = "bedrock"
 
-    def __init__(self, model: str = "amazon.nova-pro-v1:0", region_name: Optional[str] = None):
+    def __init__(self, model="amazon.nova-pro-v1:0"):
         super().__init__(model=model)
-        self.client = boto3.client("bedrock-runtime", region_name=region_name)
+
+        # Lazy import to avoid unnecessary dependency if this client is not used
+        import boto3
+        self.client = boto3.client("bedrock-runtime")
 
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         messages = [

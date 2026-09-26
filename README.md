@@ -8,37 +8,22 @@ play <provider> [-m <model>]
 ```
 
 ### Supported Providers and Models
-#### AWS Bedrock (`bedrock`)
-- **Default Model**: `amazon.nova-pro-v1:0`
-- **Suggested Alternate Models**:
-  - Meta: `meta.llama3-70b-instruct-v1:0`
-  - Mistral: `mistral.mistral-large-2402-v1:0`
-- **Credential Requirement**: AWS credentials via `aws login`, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files (`AWS_PROFILE`).
+#### AWS Bedrock
+`play bedrock` uses `amazon.nova-pro-v1:0` as its default model. (`meta.llama3-70b-instruct-v1:0` and `mistral.mistral-large-2402-v1:0` are also confirmed to work with this provider.) Requires AWS credentials via `aws login`, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files (`AWS_PROFILE`).
 
-#### Anthropic (`anthropic`)
-- **Default Model**: `claude-3-5-sonnet-20241022`
-- **Suggested Alternate Models**:
-  - `claude-3-5-haiku-20241022`
-  - `claude-3-opus-20240229`
-- **Credential Requirement**: `ANTHROPIC_API_KEY` environment variable.
+#### Anthropic
+`play anthropic` uses `claude-3-5-sonnet-20241022` as its default model. Requires the `ANTHROPIC_API_KEY` environment variable.
 
-#### OpenAI (`openai`)
-- **Default Model**: `gpt-4o`
-- **Suggested Alternate Models**:
-  - `gpt-4o-mini`
-  - `o3-mini`
-- **Credential Requirement**: `OPENAI_API_KEY` environment variable.
+#### OpenAI
+`play openai` uses `gpt-4o` as its default model. Requires the `OPENAI_API_KEY` environment variable. Can be directed at alternate provider URLs via the optional `OPENAI_BASE_URL` environment variable.
 
-#### Local (`local`)
-This provider is intended to be used with OpenAI-compatible local LLM runtimes (LM Studio, Ollama, vLLM, or similar).
-- **Server URL**: Uses `http://localhost:1234/v1` by default. Set the `LOCAL_AI_BASE_URL` environment variable if a custom URL is needed.
-- **Model**: Unspecified by default but a value can be provided if needed.
-- **Optional Credential**: `LOCAL_AI_API_KEY` environment variable.
+#### Local
+`play local` connects to `http://localhost:1234/v1` using the OpenAI client with placeholder values for the model and API key. This provides a convenient option for connecting to compatible local LLM runtimes (LM Studio, Ollama, vLLM, or similar). 
 
-**Example usage via LM Studio:**
+Example usage with LM Studio:
 1. Download and install [LM Studio](https://lmstudio.ai).
 2. Open LM Studio, search for and download your preferred model (e.g. Llama 3, Mistral, Qwen), modify the configuration if desired, and load it into memory.
-3. Navigate to the "Local Server" tab and click "Start Server". The default server settings and URL will work with this project.
+3. Navigate to the "Local Server" tab and click "Start Server". Keep the default server settings (port 1234, no authentication, disable mcp.json).
 4. Run the CLI: `play local`
 
 ## Setup

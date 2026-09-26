@@ -1,17 +1,22 @@
+"""AI client using Anthropic API."""
 from typing import Optional
-import anthropic
+from os import getenv
 
-from generative_journey.ai_clients import BaseAIClient
+from . import BaseAIClient
 
 
 class AnthropicClient(BaseAIClient):
-    """AI client using Anthropic API SDK."""
-
     provider_name: str = "anthropic"
 
-    def __init__(self, model: str = "claude-3-5-sonnet-20241022", api_key: Optional[str] = None):
+    def __init__(self, model="claude-3-5-sonnet-20241022"):
         super().__init__(model=model)
-        self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        api_key = getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set.")
+        
+        # Lazy import to avoid unnecessary dependency if this client is not used
+        import anthropic
+        self.client = anthropic.Anthropic(api_key=api_key)
 
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         kwargs = {
