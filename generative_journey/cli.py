@@ -1,10 +1,44 @@
+import sys
 import click
+
+from generative_journey.ai import DEFAULT_MODELS, get_ai_client
 
 
 @click.command()
-def main():
+@click.argument("provider", required=False)
+@click.option("-m", "--model", help="AI model name override.")
+def main(provider: str | None, model: str | None):
     """Main entry point for Generative Journey CLI."""
-    click.echo("Welcome to Generative Journey!")
+    if not provider:
+        click.echo("Error: Missing required argument 'PROVIDER'.", err=True)
+        click.echo(
+            f"Supported providers: {', '.join(DEFAULT_MODELS.keys())}.\n"
+            "Please refer to README.md for details on supported providers, models, and API key configurations.",
+            err=True,
+        )
+        sys.exit(1)
+
+    provider_clean = provider.lower().strip()
+    if provider_clean not in DEFAULT_MODELS:
+        click.echo(f"Error: Unsupported AI provider '{provider}'.", err=True)
+        click.echo(
+            f"Supported providers: {', '.join(DEFAULT_MODELS.keys())}.\n"
+            "Please refer to README.md for details on supported providers, models, and API key configurations.",
+            err=True,
+        )
+        sys.exit(1)
+
+    selected_model = model or DEFAULT_MODELS[provider_clean]
+    click.echo(f"Welcome to Generative Journey! (Using provider: {provider_clean}, model: {selected_model})")
+
+    try:
+        client = get_ai_client(provider_clean, model=selected_model)
+        prompt = "Introduce a mystical adventure game setting in two evocative sentences."
+        response = client.generate_response(prompt)
+        click.echo(f"\nAI Response:\n{response}")
+    except Exception as e:
+        click.echo(f"Error communicating with AI service: {e}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

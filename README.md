@@ -84,24 +84,84 @@ Text-based adventure game with generative AI storytelling played in a terminal
 
 ## Usage
 
-After installing the package in your active virtual environment, run the `play` command:
+After installing the package in your active virtual environment, run the `play` command followed by the AI provider name:
 
 ```bash
-play
+play <provider> [-m <model>]
 ```
 
-Output:
+### Supported Providers & Default Models
+
+| Provider | Default Model | Key / Credential Requirement |
+| --- | --- | --- |
+| `bedrock` | `amazon.nova-pro-v1:0` | AWS credentials via `aws login`, AWS SSO, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files. |
+| `anthropic` | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` environment variable. |
+| `openai` | `gpt-4o` | `OPENAI_API_KEY` environment variable. |
+
+### Command Options
+
+- `-m`, `--model`: Override the default model for the selected provider.
+
+### Examples
+
+Run with AWS Bedrock (default model `amazon.nova-pro-v1:0`):
+```bash
+play bedrock
+```
+
+Run with Anthropic (default model `claude-3-5-sonnet-20241022`):
+```bash
+play anthropic
+```
+
+Run with OpenAI specifying a custom model override:
+```bash
+play openai -m gpt-4o-mini
+```
+
+If no provider argument is supplied, `play` will exit with an error message directing you back to this documentation:
 ```text
-Welcome to Generative Journey!
+Error: Missing required argument 'PROVIDER'.
+Supported providers: bedrock, anthropic, openai.
+Please refer to README.md for details on supported providers, models, and API key configurations.
+```
+
+---
+
+## Configuration & Environment Variables
+
+### AWS Bedrock Authentication
+Bedrock leverages standard AWS credential resolution using `boto3`. You can authenticate using:
+- **AWS CLI Single Sign-On / Login**:
+  ```bash
+  aws sso login
+  ```
+- **Environment Variables**:
+  ```bash
+  export AWS_ACCESS_KEY_ID="your-access-key-id"
+  export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+  export AWS_REGION="us-east-1"
+  ```
+- **AWS Credentials Profile (`~/.aws/credentials`)**:
+  ```bash
+  export AWS_PROFILE="your-profile-name"
+  ```
+
+### Anthropic API Key
+Set the `ANTHROPIC_API_KEY` environment variable:
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### OpenAI API Key
+Set the `OPENAI_API_KEY` environment variable:
+```bash
+export OPENAI_API_KEY="sk-..."
 ```
 
 ---
 
 ## Game Architecture
-
-*(Stub - Future Implementation)*
-
-## Configuration & Environment Variables
 
 *(Stub - Future Implementation)*
 
