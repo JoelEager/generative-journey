@@ -90,18 +90,39 @@ After installing the package in your active virtual environment, run the `play` 
 play <provider> [-m <model>]
 ```
 
-### Supported Providers & Default Models
+### Supported Providers
 
-| Provider | Default Model | Key / Credential Requirement |
-| --- | --- | --- |
-| `bedrock` | `amazon.nova-pro-v1:0` | AWS credentials via `aws login`, AWS SSO, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files. |
-| `anthropic` | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` environment variable. |
-| `openai` | `gpt-4o` | `OPENAI_API_KEY` environment variable. |
-| `local` | `local-model` | Any OpenAI-compatible local LLM server (e.g. LM Studio at `http://localhost:1234/v1`, Ollama, vLLM, etc.). |
+#### AWS Bedrock (`bedrock`)
+- **Default Model**: `amazon.nova-pro-v1:0`
+- **Suggested Alternate Models**:
+  - Meta: `meta.llama3-70b-instruct-v1:0`
+  - Mistral: `mistral.mistral-large-2402-v1:0`
+- **Credential Requirement**: AWS credentials via `aws sso login`, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files (`AWS_PROFILE`).
+
+#### Anthropic (`anthropic`)
+- **Default Model**: `claude-3-5-sonnet-20241022`
+- **Suggested Alternate Models**:
+  - `claude-3-5-haiku-20241022`
+  - `claude-3-opus-20240229`
+- **Credential Requirement**: `ANTHROPIC_API_KEY` environment variable.
+
+#### OpenAI (`openai`)
+- **Default Model**: `gpt-4o`
+- **Suggested Alternate Models**:
+  - `gpt-4o-mini`
+  - `o3-mini`
+- **Credential Requirement**: `OPENAI_API_KEY` environment variable.
+
+#### Local (`local`)
+- **Default Model**: None required by default (only sent to server if provided via `-m` / `--model`).
+- **Suggested Alternate Models**:
+  - `llama-3-8b-instruct`
+  - `mistral-7b-instruct`
+- **Server / URL Requirement**: Any OpenAI-compatible local LLM server (e.g. LM Studio, Ollama, vLLM). Uses `http://localhost:1234/v1` by default or `LOCAL_AI_BASE_URL` when a custom URL is needed.
 
 ### Command Options
 
-- `-m`, `--model`: Override the default model for the selected provider.
+- `-m`, `--model`: Override the model for the selected provider.
 
 ### Examples
 
@@ -185,9 +206,13 @@ The `local` provider works with any OpenAI-compatible server running locally on 
    ```
 
 #### Configuring Base URL & Options
-If your local AI server (LM Studio, Ollama, vLLM, LocalAI, etc.) runs on a custom URL or port, set `LOCAL_AI_BASE_URL`:
+If your local AI server (LM Studio, Ollama, vLLM, LocalAI, etc.) runs on a custom URL or port, set the `LOCAL_AI_BASE_URL` environment variable:
 ```bash
 export LOCAL_AI_BASE_URL="http://localhost:1234/v1"
+```
+If your server requires an API key, set `LOCAL_AI_API_KEY`:
+```bash
+export LOCAL_AI_API_KEY="your-local-api-key"
 ```
 
 ---

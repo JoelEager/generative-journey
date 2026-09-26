@@ -1,20 +1,20 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, Optional, Type
 
 
-DEFAULT_MODELS: Dict[str, str] = {
-    "bedrock": "amazon.nova-pro-v1:0",
-    "anthropic": "claude-3-5-sonnet-20241022",
-    "openai": "gpt-4o",
-    "local": "local-model",
-}
+SUPPORTED_PROVIDERS = ("bedrock", "anthropic", "openai", "local")
 
 
 class BaseAIClient(ABC):
     """Abstract base client interface for AI storytelling interaction."""
 
-    def __init__(self, model: str):
+    provider_name: str = "base"
+
+    def __init__(self, model: Optional[str] = None):
         self.model = model
+
+    def __repr__(self) -> str:
+        return f"provider: {self.provider_name}, model: {self.model}"
 
     @abstractmethod
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
@@ -36,24 +36,26 @@ def get_ai_client(provider: str, model: Optional[str] = None) -> BaseAIClient:
     :raises ValueError: If provider is unknown.
     """
     provider_clean = provider.lower().strip()
-    if provider_clean not in DEFAULT_MODELS:
+    if provider_clean not in SUPPORTED_PROVIDERS:
         raise ValueError(
-            f"Unsupported AI provider: '{provider}'. Supported providers are: {', '.join(DEFAULT_MODELS.keys())}"
+            f"Unsupported AI provider: '{provider}'. Supported providers are: {', '.join(SUPPORTED_PROVIDERS)}"
         )
 
-    selected_model = model if model else DEFAULT_MODELS[provider_clean]
+    kwargs = {}
+    if model is not None:
+        kwargs["model"] = model
 
     if provider_clean == "bedrock":
-        from generative_journey.ai.bedrock import BedrockClient
-        return BedrockClient(model=selected_model)
+        from generative_journey.ai_clients.bedrock import BedrockClient
+        return BedrockClient(**kwargs)
     elif provider_clean == "anthropic":
-        from generative_journey.ai.anthropic import AnthropicClient
-        return AnthropicClient(model=selected_model)
+        from generative_journey.ai_clients.anthropic import AnthropicClient
+        return AnthropicClient(**kwargs)
     elif provider_clean == "openai":
-        from generative_journey.ai.openai import OpenAIClient
-        return OpenAIClient(model=selected_model)
+        from generative_journey.ai_clients.openai import OpenAIClient
+        return OpenAIClient(**kwargs)
     elif provider_clean == "local":
-        from generative_journey.ai.local import LocalClient
-        return LocalClient(model=selected_model)
+        from generative_journey.ai_clients.local import LocalClient
+        return LocalClient(**kwargs)
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")

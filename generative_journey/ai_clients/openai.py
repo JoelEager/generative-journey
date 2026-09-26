@@ -1,14 +1,16 @@
 from typing import Optional
 import openai
 
-from generative_journey.ai import BaseAIClient
+from generative_journey.ai_clients import BaseAIClient
 
 
 class OpenAIClient(BaseAIClient):
     """AI client using OpenAI API SDK."""
 
-    def __init__(self, model: str, api_key: Optional[str] = None):
-        super().__init__(model)
+    provider_name: str = "openai"
+
+    def __init__(self, model: str = "gpt-4o", api_key: Optional[str] = None):
+        super().__init__(model=model)
         self.client = openai.OpenAI(api_key=api_key) if api_key else openai.OpenAI()
 
     def generate_response(self, prompt: str, system_prompt: Optional[str] = None) -> str:
