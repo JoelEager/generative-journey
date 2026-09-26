@@ -5,6 +5,7 @@ from click.testing import CliRunner
 from generative_journey.ai import BaseAIClient, DEFAULT_MODELS, get_ai_client
 from generative_journey.ai.anthropic import AnthropicClient
 from generative_journey.ai.bedrock import BedrockClient
+from generative_journey.ai.local import LocalClient
 from generative_journey.ai.openai import OpenAIClient
 from generative_journey.cli import main
 
@@ -24,6 +25,10 @@ def test_get_ai_client_factory(mock_boto, mock_anthropic, mock_openai):
     openai = get_ai_client("openai")
     assert isinstance(openai, OpenAIClient)
     assert openai.model == DEFAULT_MODELS["openai"]
+
+    local = get_ai_client("local")
+    assert isinstance(local, LocalClient)
+    assert local.model == DEFAULT_MODELS["local"]
 
     with pytest.raises(ValueError, match="Unsupported AI provider"):
         get_ai_client("unknown_provider")
@@ -96,6 +101,30 @@ def test_openai_client_generate_response(mock_openai_cls):
     )
 
 
+@patch("generative_journey.ai.local.openai.OpenAI")
+def test_local_client_generate_response(mock_openai_cls):
+    mock_openai_instance = MagicMock()
+    mock_openai_cls.return_value = mock_openai_instance
+    mock_choice = MagicMock()
+    mock_choice.message.content = "You are in a dimly lit dungeon chamber."
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_openai_instance.chat.completions.create.return_value = mock_response
+
+    client = LocalClient(model="local-model", base_url="http://localhost:1234/v1")
+    response = client.generate_response("Look at surroundings", system_prompt="RPG game host")
+
+    assert response == "You are in a dimly lit dungeon chamber."
+    mock_openai_cls.assert_called_once_with(base_url="http://localhost:1234/v1", api_key="local-ai")
+    mock_openai_instance.chat.completions.create.assert_called_once_with(
+        model="local-model",
+        messages=[
+            {"role": "system", "content": "RPG game host"},
+            {"role": "user", "content": "Look at surroundings"},
+        ],
+    )
+
+
 def test_cli_missing_provider_exits_with_error():
     runner = CliRunner()
     result = runner.invoke(main, [])
@@ -119,9 +148,9 @@ def test_cli_successful_invocation(mock_get_ai_client):
     mock_get_ai_client.return_value = mock_client
 
     runner = CliRunner()
-    result = runner.invoke(main, ["bedrock", "-m", "custom-model"])
+    result = runner.invoke(main, ["local", "-m", "llama-3-8b"])
 
     assert result.exit_code == 0
-    assert "Using provider: bedrock, model: custom-model" in result.output
+    assert "Using provider: local, model: llama-3-8b" in result.output
     assert "AI Response:\nThe journey begins under a moonlit sky." in result.output
-    mock_get_ai_client.assert_called_once_with("bedrock", model="custom-model")
+    mock_get_ai_client.assert_called_once_with("local", model="llama-3-8b")

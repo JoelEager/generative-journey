@@ -6,6 +6,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "bedrock": "amazon.nova-pro-v1:0",
     "anthropic": "claude-3-5-sonnet-20241022",
     "openai": "gpt-4o",
+    "local": "local-model",
 }
 
 
@@ -29,7 +30,7 @@ class BaseAIClient(ABC):
 def get_ai_client(provider: str, model: Optional[str] = None) -> BaseAIClient:
     """Factory function to instantiate an AI client based on provider name.
 
-    :param provider: Name of provider ('bedrock', 'anthropic', 'openai').
+    :param provider: Name of provider ('bedrock', 'anthropic', 'openai', 'local').
     :param model: Optional model override.
     :return: An instance of BaseAIClient.
     :raises ValueError: If provider is unknown.
@@ -51,5 +52,8 @@ def get_ai_client(provider: str, model: Optional[str] = None) -> BaseAIClient:
     elif provider_clean == "openai":
         from generative_journey.ai.openai import OpenAIClient
         return OpenAIClient(model=selected_model)
+    elif provider_clean == "local":
+        from generative_journey.ai.local import LocalClient
+        return LocalClient(model=selected_model)
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")

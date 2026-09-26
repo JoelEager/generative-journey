@@ -97,6 +97,7 @@ play <provider> [-m <model>]
 | `bedrock` | `amazon.nova-pro-v1:0` | AWS credentials via `aws login`, AWS SSO, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files. |
 | `anthropic` | `claude-3-5-sonnet-20241022` | `ANTHROPIC_API_KEY` environment variable. |
 | `openai` | `gpt-4o` | `OPENAI_API_KEY` environment variable. |
+| `local` | `local-model` | Any OpenAI-compatible local LLM server (e.g. LM Studio at `http://localhost:1234/v1`, Ollama, vLLM, etc.). |
 
 ### Command Options
 
@@ -119,10 +120,15 @@ Run with OpenAI specifying a custom model override:
 play openai -m gpt-4o-mini
 ```
 
+Run with a local OpenAI-compatible server:
+```bash
+play local
+```
+
 If no provider argument is supplied, `play` will exit with an error message directing you back to this documentation:
 ```text
 Error: Missing required argument 'PROVIDER'.
-Supported providers: bedrock, anthropic, openai.
+Supported providers: bedrock, anthropic, openai, local.
 Please refer to README.md for details on supported providers, models, and API key configurations.
 ```
 
@@ -157,6 +163,31 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 Set the `OPENAI_API_KEY` environment variable:
 ```bash
 export OPENAI_API_KEY="sk-..."
+```
+
+### Local Provider Setup (LM Studio & generic local servers)
+The `local` provider works with any OpenAI-compatible server running locally on your machine.
+
+#### Setting up with LM Studio
+
+1. **Install LM Studio**:
+   Download and install LM Studio from [https://lmstudio.ai](https://lmstudio.ai).
+
+2. **Download & Load a Model**:
+   Open LM Studio, search for and download your preferred model (e.g. Llama 3, Mistral, Qwen), and load it into memory.
+
+3. **Start the Local Server**:
+   Navigate to the **Local Server** tab (`<->` icon) in LM Studio and click **Start Server**. By default, it serves an OpenAI-compatible API at `http://localhost:1234/v1`.
+
+4. **Run the CLI**:
+   ```bash
+   play local
+   ```
+
+#### Configuring Base URL & Options
+If your local AI server (LM Studio, Ollama, vLLM, LocalAI, etc.) runs on a custom URL or port, set `LOCAL_AI_BASE_URL`:
+```bash
+export LOCAL_AI_BASE_URL="http://localhost:1234/v1"
 ```
 
 ---
