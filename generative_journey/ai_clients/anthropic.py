@@ -1,5 +1,5 @@
 """AI client using Anthropic API."""
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 from os import getenv
 
 from .common import BaseAIClient
@@ -40,41 +40,62 @@ class AnthropicClient(BaseAIClient):
         }
         return self.client.messages.create(**kwargs)
 
-    def _parse_response(self, response: Any) -> Tuple[List[Any], List[Any], bool, List[Any], List[Any]]:
-        turn_actions = []
-        verbose_actions = []
-        has_invalid_tool = False
-        tool_results = []
+    def _format_tool_result(self, tool_use_id: str, is_error: bool = False, text: Optional[str] = None) -> dict:
+        result = {
+            "type": "tool_result",
+            "tool_use_id": tool_use_id,
+            "content": text if text else ("Error" if is_error else "Success"),
+        }
+        if is_error:
+            result["is_error"] = True
+        return result
 
-        for block in response.content:
-            if getattr(block, "type", None) == "text":
-                if block.text:
-                    turn_actions.append(NarrativeMessage(block.text))
-            elif getattr(block, "type", None) == "tool_use":
-                fn_name = block.name
-                args = block.input
+    def _parse_response(self, response: Any) -> Tuple[List[Any], bool]:
+        def _get_val(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        content_blocks = getattr(response, "content", []) or []
+        history_blocks = [b for b in content_blocks if _get_val(b, "type") != "thinking"]
+        if history_blocks:
+            self.messages.append({"role": "assistant", "content": history_blocks})
+
+        actions = []
+        tool_results = []
+        has_invalid_tool = False
+
+        for block in content_blocks:
+            block_type = _get_val(block, "type")
+            if block_type == "thinking":
+                thinking_text = _get_val(block, "thinking") or _get_val(block, "text") or str(block)
+                actions.append(VerboseMessage(thinking_text, type="thinking"))
+            elif block_type == "text":
+                text = _get_val(block, "text")
+                if text:
+                    actions.append(NarrativeMessage(text))
+            elif block_type == "tool_use":
+                actions.append(VerboseMessage(repr(block), type="toolUse"))
+                fn_name = _get_val(block, "name")
+                args = _get_val(block, "input") or {}
+                tool_id = _get_val(block, "id")
                 try:
                     action = parse_tool_action(fn_name, args)
-                    turn_actions.append(action)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": "Success",
-                    })
+                    actions.append(action)
+                    tool_results.append(self._format_tool_result(tool_id, is_error=False, text="Success"))
                 except Exception as err:
                     has_invalid_tool = True
                     error_msg = str(err)
-                    verbose_actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": f"Error: {error_msg}. Please try again with valid parameters.",
-                        "is_error": True,
-                    })
+                    actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
+                    tool_results.append(self._format_tool_result(
+                        tool_id,
+                        is_error=True,
+                        text=f"Error: {error_msg}. Please try again with valid parameters."
+                    ))
             else:
-                verbose_actions.append(VerboseMessage(repr(block), type="unknown"))
+                actions.append(VerboseMessage(repr(block), type="unknown"))
 
-        assistant_msgs = [{"role": "assistant", "content": response.content}]
-        retry_msgs = [{"role": "user", "content": tool_results}] if tool_results else []
+        if tool_results:
+            self.messages.append({"role": "user", "content": tool_results})
 
-        return turn_actions, verbose_actions, has_invalid_tool, assistant_msgs, retry_msgs
+        return actions, has_invalid_tool

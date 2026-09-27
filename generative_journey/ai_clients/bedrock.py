@@ -1,9 +1,12 @@
 """AI client using AWS Bedrock runtime (boto3) Converse API."""
+import re
 from typing import List, Any, Optional
 
 from .common import BaseAIClient
 from .. import ai_prompt
 from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
+
+THINKING_PATTERN = re.compile(r'<thinking>(.*?)</thinking>', re.DOTALL)
 
 
 class BedrockClient(BaseAIClient):
@@ -55,16 +58,41 @@ class BedrockClient(BaseAIClient):
 
     def _parse_response(self, response):
         content_blocks = response.get("output", {}).get("message", {}).get("content", [])
-        self.messages.extend([{"role": "assistant", "content": content_blocks}])
+        history_blocks = []
         tool_results = []
         actions = []
         has_invalid_tool = False
 
         for block in content_blocks:
-            if block.get("text"):
-                actions.append(NarrativeMessage(block["text"]))
+            if "reasoningContent" in block:
+                rc = block["reasoningContent"]
+                thinking_text = ""
+                if isinstance(rc, dict):
+                    if "reasoningText" in rc and isinstance(rc["reasoningText"], dict) and "text" in rc["reasoningText"]:
+                        thinking_text = rc["reasoningText"]["text"]
+                    elif "text" in rc:
+                        thinking_text = rc["text"]
+                    else:
+                        thinking_text = str(rc)
+                elif isinstance(rc, str):
+                    thinking_text = rc
+                else:
+                    thinking_text = str(rc)
+                if thinking_text:
+                    actions.append(VerboseMessage(thinking_text, type="thinking"))
+            elif block.get("text"):
+                raw_text = block["text"]
+                for match in THINKING_PATTERN.finditer(raw_text):
+                    thinking_str = match.group(1).strip()
+                    if thinking_str:
+                        actions.append(VerboseMessage(thinking_str, type="thinking"))
+                clean_text = THINKING_PATTERN.sub("", raw_text).strip()
+                if clean_text:
+                    actions.append(NarrativeMessage(clean_text))
+                    history_blocks.append({"text": clean_text})
             elif "toolUse" in block:
                 actions.append(VerboseMessage(repr(block), type="toolUse"))
+                history_blocks.append(block)
                 tool_use = block["toolUse"]
                 tool_use_id = tool_use.get("toolUseId")
                 fn_name = tool_use.get("name")
@@ -79,8 +107,12 @@ class BedrockClient(BaseAIClient):
                     tool_results.append(self._format_tool_result(tool_use_id, "error", f"Error: {error_msg}. Please try again with valid parameters."))
             else:
                 actions.append(VerboseMessage(repr(block), type="unknown"))
+                history_blocks.append(block)
+
+        if history_blocks:
+            self.messages.append({"role": "assistant", "content": history_blocks})
 
         if tool_results:
-            self.messages.extend([{"role": "user", "content": tool_results}])
+            self.messages.append({"role": "user", "content": tool_results})
 
         return actions, has_invalid_tool
