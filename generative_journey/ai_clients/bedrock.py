@@ -64,7 +64,9 @@ class BedrockClient(BaseAIClient):
         has_invalid_tool = False
 
         for block in content_blocks:
-            if block.get("text"):
+            if "reasoningContent" in block:
+                actions.append(VerboseMessage(repr(block), type="thinking"))
+            elif block.get("text"):
                 raw_text = block["text"]
                 for match in THINKING_PATTERN.finditer(raw_text):
                     thinking_str = match.group(1).strip()

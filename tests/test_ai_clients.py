@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 from generative_journey import ai_prompt
 from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame
 from generative_journey.ai_clients import BaseAIClient, get_ai_client
-from generative_journey.ai_clients.anthropic import AnthropicClient
 from generative_journey.ai_clients.bedrock import BedrockClient
 from generative_journey.ai_clients.local import LocalClient
 from generative_journey.ai_clients.openai import OpenAIClient
@@ -46,18 +45,12 @@ class TestBaseAIClient(unittest.TestCase):
 
 class TestAIClientsFactory(unittest.TestCase):
 
-    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
     @patch("openai.OpenAI")
-    @patch("anthropic.Anthropic")
     @patch("boto3.client")
-    def test_get_ai_client_factory(self, mock_boto, mock_anthropic, mock_openai):
+    def test_get_ai_client_factory(self, mock_boto, mock_openai):
         bedrock = get_ai_client("bedrock")
         self.assertIsInstance(bedrock, BedrockClient)
         self.assertEqual(bedrock.model, "amazon.nova-pro-v1:0")
-
-        anthropic = get_ai_client("anthropic", model="custom-claude")
-        self.assertIsInstance(anthropic, AnthropicClient)
-        self.assertEqual(anthropic.model, "custom-claude")
 
         openai = get_ai_client("openai", api_key="dummy")
         self.assertIsInstance(openai, OpenAIClient)
@@ -177,94 +170,6 @@ class TestOpenAIClient(unittest.TestCase):
         self.assertEqual(len(assistant_hist), 1)
         self.assertNotIn("reasoning_content", assistant_hist[0])
         self.assertEqual(assistant_hist[0]["content"], "You see a chest.")
-
-
-class TestAnthropicClient(unittest.TestCase):
-
-    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
-    @patch("anthropic.Anthropic")
-    def test_anthropic_generate_actions(self, mock_anthropic_cls):
-        mock_instance = MagicMock()
-        mock_anthropic_cls.return_value = mock_instance
-
-        mock_text_block = MagicMock()
-        mock_text_block.type = "text"
-        mock_text_block.text = "You see a dark portal."
-
-        mock_tool_block = MagicMock()
-        mock_tool_block.type = "tool_use"
-        mock_tool_block.id = "tool_1"
-        mock_tool_block.name = "end_game"
-        mock_tool_block.input = {"won": True}
-
-        mock_response = MagicMock()
-        mock_response.content = [mock_text_block, mock_tool_block]
-        mock_instance.messages.create.return_value = mock_response
-
-        client = AnthropicClient()
-        actions = client.generate_actions()
-
-        self.assertTrue(any(isinstance(a, NarrativeMessage) and a.message == "You see a dark portal." for a in actions))
-        self.assertTrue(any(isinstance(a, EndGame) and a.won for a in actions))
-
-    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
-    @patch("anthropic.Anthropic")
-    def test_anthropic_generate_actions_invalid_tool_retry(self, mock_anthropic_cls):
-        mock_instance = MagicMock()
-        mock_anthropic_cls.return_value = mock_instance
-
-        mock_bad_tool = MagicMock()
-        mock_bad_tool.type = "tool_use"
-        mock_bad_tool.id = "tool_1"
-        mock_bad_tool.name = "end_game"
-        mock_bad_tool.input = {"invalid_param": 123}
-        resp1 = MagicMock(content=[mock_bad_tool])
-
-        mock_good_tool = MagicMock()
-        mock_good_tool.type = "tool_use"
-        mock_good_tool.id = "tool_2"
-        mock_good_tool.name = "end_game"
-        mock_good_tool.input = {"won": False}
-        resp2 = MagicMock(content=[mock_good_tool])
-
-        mock_instance.messages.create.side_effect = [resp1, resp2]
-
-        client = AnthropicClient()
-        actions = client.generate_actions()
-
-        self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "warn" for a in actions))
-        self.assertTrue(any(isinstance(a, EndGame) and not a.won for a in actions))
-
-    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
-    @patch("anthropic.Anthropic")
-    def test_anthropic_thinking_trace_and_history_exclusion(self, mock_anthropic_cls):
-        mock_instance = MagicMock()
-        mock_anthropic_cls.return_value = mock_instance
-
-        mock_thinking = MagicMock()
-        mock_thinking.type = "thinking"
-        mock_thinking.thinking = "Analyzing user intent carefully."
-
-        mock_text = MagicMock()
-        mock_text.type = "text"
-        mock_text.text = "The room is quiet."
-
-        mock_response = MagicMock(content=[mock_thinking, mock_text])
-        mock_instance.messages.create.return_value = mock_response
-
-        client = AnthropicClient()
-        actions = client.generate_actions()
-
-        thinking_msgs = [a for a in actions if isinstance(a, VerboseMessage) and a.type == "thinking"]
-        self.assertEqual(len(thinking_msgs), 1)
-        self.assertEqual(thinking_msgs[0].message, "Analyzing user intent carefully.")
-
-        # Ensure thinking block was excluded from self.messages history
-        assistant_hist = [m for m in client.messages if m.get("role") == "assistant"]
-        self.assertEqual(len(assistant_hist), 1)
-        hist_content = assistant_hist[0]["content"]
-        self.assertEqual(len(hist_content), 1)
-        self.assertEqual(hist_content[0], mock_text)
 
 
 class TestBedrockClient(unittest.TestCase):

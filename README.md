@@ -13,9 +13,6 @@ For further usage information see `play --help`.
 #### AWS Bedrock
 `play bedrock` uses `amazon.nova-pro-v1:0` as its default model. (`meta.llama3-70b-instruct-v1:0` and `mistral.mistral-large-2402-v1:0` are also confirmed to work with this provider.) Requires AWS credentials via `aws login`, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files (`AWS_PROFILE`).
 
-#### Anthropic
-`play anthropic` uses `claude-3-5-sonnet-20241022` as its default model. Requires the `ANTHROPIC_API_KEY` environment variable.
-
 #### OpenAI
 `play openai` uses `gpt-4o` as its default model. Requires the `OPENAI_API_KEY` environment variable. Can be directed at alternate provider URLs via the optional `OPENAI_BASE_URL` environment variable.
 
