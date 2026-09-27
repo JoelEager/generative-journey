@@ -1,17 +1,16 @@
 """AI client interface and factory for Generative Journey."""
 from .common import BaseAIClient
 from .bedrock import BedrockClient
-from .anthropic import AnthropicClient
 from .openai import OpenAIClient
 from .local import LocalClient
 
-CLIENTS = (BedrockClient, AnthropicClient, OpenAIClient, LocalClient)
+CLIENTS = (BedrockClient, OpenAIClient, LocalClient)
 
 
 def get_ai_client(provider: str, **kwargs) -> BaseAIClient:
     """
     Factory function to instantiate an AI client based on provider name.
-    :param provider: Name of provider ('bedrock', 'anthropic', 'openai', 'local').
+    :param provider: Name of provider ('bedrock', 'openai', 'local').
     :param **kwargs: Additional keyword arguments for the AI client.
     :return: An instance of BaseAIClient.
     :raises ValueError: If provider is unknown.
