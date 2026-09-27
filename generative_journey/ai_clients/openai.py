@@ -11,7 +11,7 @@ from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 class OpenAIClient(BaseAIClient):
     provider_name: str = "openai"
 
-    def __init__(self, model="gpt-4o-mini", api_key=None, base_url=None):
+    def __init__(self, model="gpt-5.4-nano", api_key=None, base_url=None):
         super().__init__(model=model)
         self.base_url = base_url
 

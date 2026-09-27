@@ -14,7 +14,11 @@ For further usage information see `play --help`.
 `play bedrock` uses `amazon.nova-pro-v1:0` as its default model. (`meta.llama3-70b-instruct-v1:0` and `mistral.mistral-large-2402-v1:0` are also confirmed to work with this provider.) Requires AWS credentials via `aws login`, standard AWS env variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`), or AWS config files (`AWS_PROFILE`).
 
 #### OpenAI
-`play openai` uses `gpt-4o` as its default model. Requires the `OPENAI_API_KEY` environment variable. Can be directed at alternate provider URLs via the optional `OPENAI_BASE_URL` environment variable.
+`play openai` uses [`gpt-5.4-nano`](https://developers.openai.com/api/docs/models/gpt-5.4-nano) as its default model. Requires the `OPENAI_API_KEY` environment variable. Can be directed at alternate provider URLs via the optional `OPENAI_BASE_URL` environment variable.
+
+Noteworthy alternate models:
+- [`gpt-4o-mini`](https://developers.openai.com/api/docs/models/gpt-4o-mini): Very cheap but sometimes messes up tool calls
+- [`gpt-5-nano`](https://developers.openai.com/api/docs/models/gpt-5-nano): Quality output at a low cost but the high reasoning budget makes it slower and more expensive than it otherwise would be
 
 #### Local
 `play local` connects to `http://localhost:1234/v1` using the OpenAI client with placeholder values for the model and API key. This provides a convenient option for connecting to compatible local LLM runtimes (LM Studio, Ollama, vLLM, or similar). 
