@@ -1,9 +1,9 @@
 """AI client using OpenAI API SDK."""
 import json
-from typing import List, Any, Tuple, Optional
+from typing import List, Any, Tuple
 from os import getenv
 
-from .common import MAX_TOKENS, BaseAIClient
+from .common import BaseAIClient
 from .. import ai_prompt
 from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
@@ -11,7 +11,7 @@ from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 class OpenAIClient(BaseAIClient):
     provider_name: str = "openai"
 
-    def __init__(self, model="gpt-4o", api_key=None, base_url=None):
+    def __init__(self, model="gpt-4o-mini", api_key=None, base_url=None):
         super().__init__(model=model)
         self.base_url = base_url
 
@@ -54,7 +54,6 @@ class OpenAIClient(BaseAIClient):
         messages = [{"role": "system", "content": ai_prompt.SYSTEM_PROMPT}] + self.messages
         kwargs = {
             "model": self.model,
-            "max_tokens": MAX_TOKENS,
             "messages": messages,
             "tools": formatted_tools,
         }
@@ -68,64 +67,36 @@ class OpenAIClient(BaseAIClient):
         }
 
     def _parse_response(self, response: Any) -> Tuple[List[Any], bool]:
-        def _get_val(obj, key, default=None):
-            if isinstance(obj, dict):
-                return obj.get(key, default)
-            return getattr(obj, key, default)
-
-        def _get_reasoning_content(msg) -> Optional[str]:
-            if isinstance(msg, dict):
-                return msg.get("reasoning_content") or msg.get("thinking")
-            rc = getattr(msg, "reasoning_content", None) or getattr(msg, "thinking", None)
-            if rc:
-                return rc
-            model_extra = getattr(msg, "model_extra", None)
-            if isinstance(model_extra, dict):
-                return model_extra.get("reasoning_content") or model_extra.get("thinking")
-            return None
-
-        actions = []
+        actions = [
+            VerboseMessage(f"{response.model} {response.usage}", type="usage")
+        ]
         has_invalid_tool = False
-        choices = _get_val(response, "choices") or []
 
-        for entry in choices:
-            message = _get_val(entry, "message")
-            if not message:
-                continue
+        for entry in response.choices:
+            message = entry.message
+            self.messages.append(message)
 
-            if isinstance(message, dict):
-                assistant_msg = {k: v for k, v in message.items() if k not in ("reasoning_content", "thinking")}
-            else:
-                assistant_msg = message
-            self.messages.append(assistant_msg)
+            if getattr(message, "reasoning_content", None):
+                actions.append(VerboseMessage(message.reasoning_content, type="thinking"))
 
-            thinking_text = _get_reasoning_content(message)
-            if thinking_text:
-                actions.append(VerboseMessage(thinking_text, type="thinking"))
+            if getattr(message, "content", None):
+                actions.append(NarrativeMessage(message.content))
 
-            content = _get_val(message, "content")
-            if content:
-                actions.append(NarrativeMessage(content))
-
-            tool_calls = _get_val(message, "tool_calls")
-            if tool_calls:
-                for tool_call in tool_calls:
-                    actions.append(VerboseMessage(repr(tool_call), type="toolUse"))
-                    func = _get_val(tool_call, "function")
-                    fn_name = _get_val(func, "name") if func else None
-                    raw_args = _get_val(func, "arguments") if func else {}
-                    tool_id = _get_val(tool_call, "id")
+            if getattr(message, "tool_calls", None):
+                for tool_call in message.tool_calls:
+                    func = tool_call.function
+                    actions.append(VerboseMessage(repr(func), type="toolUse"))
                     try:
-                        args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-                        action = parse_tool_action(fn_name, args)
+                        args = json.loads(func.arguments)
+                        action = parse_tool_action(func.name, args)
                         actions.append(action)
-                        self.messages.append(self._format_tool_result(tool_id, content="Success"))
+                        self.messages.append(self._format_tool_result(tool_call.id, content="Success"))
                     except Exception as err:
                         has_invalid_tool = True
                         error_msg = str(err)
-                        actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={raw_args}: {error_msg}", type="warn"))
+                        actions.append(VerboseMessage(f"Failed tool call '{func.name}' args={func.arguments}: {error_msg}", type="warn"))
                         self.messages.append(self._format_tool_result(
-                            tool_id,
+                            tool_call.id,
                             content=f"Error: {error_msg}. Please try again with valid parameters."
                         ))
 
