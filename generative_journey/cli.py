@@ -33,7 +33,11 @@ def main(provider, model, verbose):
     except Exception:
         fatal_error("Failed to initialize AI client")
 
-    click.echo(f"Welcome to Generative Journey! ({client})\n")
+    click.secho("Welcome to Generative Journey!", underline=True, nl=False)
+    if verbose:
+        click.echo(f" ({client})")
+    else:
+        click.echo()
 
     goal = click.prompt("What is your destination?", default="The legendary city of Atlantis")
     transport = click.prompt("How do you intend to get there?", default="On foot")

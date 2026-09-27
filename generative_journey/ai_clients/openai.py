@@ -78,6 +78,7 @@ class OpenAIClient(BaseAIClient):
 
             if getattr(message, "reasoning_content", None):
                 actions.append(VerboseMessage(message.reasoning_content, type="thinking"))
+                del message.reasoning_content  # Remove reasoning content from history to optimize attention
 
             if getattr(message, "content", None):
                 actions.append(NarrativeMessage(message.content))
