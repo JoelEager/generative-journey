@@ -49,15 +49,15 @@ def main(provider, model, verbose):
         for action in actions:
             if isinstance(action, VerboseMessage):
                 if verbose:
-                    click.echo(str(action))
+                    click.secho(str(action), fg="yellow")
             elif isinstance(action, NarrativeMessage):
                 click.secho("\n" + str(action), fg="cyan")
             elif isinstance(action, EndGame):
                 game_over = True
                 if action.won:
-                    click.secho("\nYou won the game!", fg="green", bold=True)
+                    click.secho("\nYou won the game!", fg="bright_green", italic=True)
                 else:
-                    click.secho("\nYou lost the game!", fg="red", bold=True)
+                    click.secho("\nYou lost the game!", fg="bright_red", italic=True)
 
         if game_over:
             break
