@@ -1,9 +1,9 @@
 """AI client using AWS Bedrock runtime (boto3) Converse API."""
-from typing import Optional, List, Any
+from typing import List, Any
 
-from generative_journey.ai_clients.common import BaseAIClient, MAX_INVOCATIONS
-from generative_journey import ai_prompt
-from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from .common import BaseAIClient, MAX_INVOCATIONS
+from .. import ai_prompt
+from ..ai_actions import NarrativeMessage, VerboseMessage, EndGame
 
 
 class BedrockClient(BaseAIClient):
@@ -18,18 +18,7 @@ class BedrockClient(BaseAIClient):
         self.messages: List[dict] = []
 
     def generate_actions(self) -> List[Any]:
-        if not self.messages:
-            user_text = ai_prompt.PLAYER_MESSAGE if ai_prompt.PLAYER_MESSAGE else "Start the game."
-            self.messages.append({
-                "role": "user",
-                "content": [{"text": user_text}]
-            })
-        else:
-            if ai_prompt.PLAYER_MESSAGE:
-                self.messages.append({
-                    "role": "user",
-                    "content": [{"text": ai_prompt.PLAYER_MESSAGE}]
-                })
+        self.messages.append({"role": "user", "content": [{"text": ai_prompt.current_prompt}]})
 
         tool_config = {
             "tools": [
@@ -46,17 +35,17 @@ class BedrockClient(BaseAIClient):
 
         actions: List[Any] = []
 
-        for invocation in range(MAX_INVOCATIONS):
+        for _ in range(MAX_INVOCATIONS):
             kwargs = {
                 "modelId": self.model,
-                "messages": self.messages,
+                "inferenceConfig": {"maxTokens": 1024},
                 "system": [{"text": ai_prompt.SYSTEM_PROMPT}],
                 "toolConfig": tool_config,
+                "messages": self.messages,
             }
 
             response = self.client.converse(**kwargs)
-            output_message = response.get("output", {}).get("message", {})
-            content_blocks = output_message.get("content", [])
+            content_blocks = response.get("output", {}).get("message", {}).get("content", [])
 
             turn_actions = []
             has_invalid_tool = False
@@ -96,30 +85,22 @@ class BedrockClient(BaseAIClient):
                                 "status": "error",
                             }
                         })
+                else:
+                    actions.append(VerboseMessage(repr(block), type="unknown"))
 
             # Record assistant turn in message history
-            self.messages.append({
-                "role": "assistant",
-                "content": content_blocks,
-            })
+            self.messages.append({"role": "assistant", "content": content_blocks})
 
             if has_invalid_tool:
                 # Append tool result errors to message history as user message for retry
-                self.messages.append({
-                    "role": "user",
-                    "content": tool_results,
-                })
-                if invocation == MAX_INVOCATIONS - 1:
-                    raise RuntimeError("AI failed to invoke tool with valid arguments within maximum allowed attempts.")
+                self.messages.append({"role": "user", "content": tool_results})
                 continue
 
             if tool_results:
-                self.messages.append({
-                    "role": "user",
-                    "content": tool_results,
-                })
+                # Add successful tool results to message history as user message for next turn
+                self.messages.append({"role": "user", "content": tool_results})
 
             actions.extend(turn_actions)
-            return actions
-
-        raise RuntimeError("AI failed to generate actions within maximum allowed attempts.")
+            break  # Exit the loop after a successful turn without invalid tools
+        
+        return actions

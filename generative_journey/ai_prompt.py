@@ -27,4 +27,12 @@ TOOLS = [
     }
 ]
 
-PLAYER_MESSAGE: str = ""
+current_prompt: str = ""
+
+def intro_prompt(goal: str, transport: str) -> str:
+    """Generate the initial prompt for the AI based on the player's goal and transport method."""
+    return (
+        f"The player has set out on a journey with the goal of '{goal}' "
+        f"and intends to travel by '{transport}'. "
+        f"Guide them through an engaging story based on their choices."
+    )

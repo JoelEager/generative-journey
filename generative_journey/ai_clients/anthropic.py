@@ -1,22 +1,20 @@
 """AI client using Anthropic API."""
-import json
-from typing import Optional, List, Any
+from typing import List, Any
 from os import getenv
 
-from generative_journey.ai_clients.common import BaseAIClient, MAX_INVOCATIONS
-from generative_journey import ai_prompt
-from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from .common import BaseAIClient, MAX_INVOCATIONS
+from .. import ai_prompt
+from ..ai_actions import NarrativeMessage, VerboseMessage, EndGame
 
 
 class AnthropicClient(BaseAIClient):
     provider_name: str = "anthropic"
 
-    def __init__(self, model="claude-3-5-sonnet-20241022", api_key=None):
+    def __init__(self, model="claude-3-5-sonnet-20241022"):
         super().__init__(model=model)
+        api_key = getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            api_key = getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY environment variable is not set.")
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set.")
         
         # Lazy import to avoid unnecessary dependency if this client is not used
         import anthropic
@@ -24,12 +22,7 @@ class AnthropicClient(BaseAIClient):
         self.messages: List[dict] = []
 
     def generate_actions(self) -> List[Any]:
-        if not self.messages:
-            user_text = ai_prompt.PLAYER_MESSAGE if ai_prompt.PLAYER_MESSAGE else "Start the game."
-            self.messages.append({"role": "user", "content": user_text})
-        else:
-            if ai_prompt.PLAYER_MESSAGE:
-                self.messages.append({"role": "user", "content": ai_prompt.PLAYER_MESSAGE})
+        self.messages.append({"role": "user", "content": ai_prompt.current_prompt})
 
         tools = [
             {
@@ -42,7 +35,7 @@ class AnthropicClient(BaseAIClient):
 
         actions: List[Any] = []
 
-        for invocation in range(MAX_INVOCATIONS):
+        for _ in range(MAX_INVOCATIONS):
             kwargs = {
                 "model": self.model,
                 "max_tokens": 1024,
@@ -86,6 +79,8 @@ class AnthropicClient(BaseAIClient):
                             "content": f"Error: {error_msg}. Please try again with valid parameters.",
                             "is_error": True,
                         })
+                else:
+                    actions.append(VerboseMessage(repr(block), type="unknown"))
 
             # Record assistant turn in message history
             self.messages.append({"role": "assistant", "content": response.content})
@@ -93,15 +88,12 @@ class AnthropicClient(BaseAIClient):
             if has_invalid_tool:
                 # Append tool result errors to message history as user message for retry
                 self.messages.append({"role": "user", "content": tool_results})
-                if invocation == MAX_INVOCATIONS - 1:
-                    raise RuntimeError("AI failed to invoke tool with valid arguments within maximum allowed attempts.")
                 continue
 
             if tool_results:
-                # Add successful tool results if needed
+                # Add successful tool results to message history as user message for next turn
                 self.messages.append({"role": "user", "content": tool_results})
 
             actions.extend(turn_actions)
-            return actions
-
-        raise RuntimeError("AI failed to generate actions within maximum allowed attempts.")
+        
+        return actions
