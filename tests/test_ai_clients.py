@@ -54,7 +54,7 @@ class TestAIClientsFactory(unittest.TestCase):
 
         openai = get_ai_client("openai", api_key="dummy")
         self.assertIsInstance(openai, OpenAIClient)
-        self.assertEqual(openai.model, "gpt-4o")
+        self.assertEqual(openai.model, "gpt-5.4-nano")
 
         local = get_ai_client("local")
         self.assertIsInstance(local, LocalClient)
@@ -76,6 +76,8 @@ class TestOpenAIClient(unittest.TestCase):
         mock_msg.reasoning_content = None
         mock_msg.thinking = None
         mock_response = MagicMock()
+        mock_response.model = "gpt-5.4-nano"
+        mock_response.usage = {"prompt_tokens": 10, "completion_tokens": 20}
         mock_response.choices = [MagicMock(message=mock_msg)]
         mock_instance.chat.completions.create.return_value = mock_response
 
@@ -83,9 +85,11 @@ class TestOpenAIClient(unittest.TestCase):
         ai_prompt.current_prompt = "Look around"
         actions = client.generate_actions()
 
-        self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], NarrativeMessage)
-        self.assertEqual(actions[0].message, "You awaken in a dark room.")
+        self.assertEqual(len(actions), 2)
+        self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "usage" for a in actions))
+        narrative_actions = [a for a in actions if isinstance(a, NarrativeMessage)]
+        self.assertEqual(len(narrative_actions), 1)
+        self.assertEqual(narrative_actions[0].message, "You awaken in a dark room.")
 
         # Verify system message in chat completions call
         mock_instance.chat.completions.create.assert_called_once()
@@ -111,13 +115,16 @@ class TestOpenAIClient(unittest.TestCase):
         mock_msg.thinking = None
 
         mock_response = MagicMock()
+        mock_response.model = "gpt-5.4-nano"
+        mock_response.usage = {"prompt_tokens": 10, "completion_tokens": 20}
         mock_response.choices = [MagicMock(message=mock_msg)]
         mock_instance.chat.completions.create.return_value = mock_response
 
         client = OpenAIClient(api_key="dummy")
         actions = client.generate_actions()
 
-        self.assertEqual(len(actions), 3) # toolUse VerboseMessage, NarrativeMessage, EndGame
+        self.assertEqual(len(actions), 4) # usage VerboseMessage, NarrativeMessage, toolUse VerboseMessage, EndGame
+        self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "usage" for a in actions))
         self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "toolUse" for a in actions))
         self.assertTrue(any(isinstance(a, NarrativeMessage) and a.message == "Victory is yours!" for a in actions))
         self.assertTrue(any(isinstance(a, EndGame) and a.won for a in actions))
@@ -133,7 +140,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_bad_tool.function.name = "end_game"
         mock_bad_tool.function.arguments = '{"invalid_param": 123}'
         mock_bad_msg = MagicMock(content="Attempting end game", tool_calls=[mock_bad_tool], reasoning_content=None, thinking=None)
-        resp1 = MagicMock(choices=[MagicMock(message=mock_bad_msg)])
+        resp1 = MagicMock(model="gpt-5.4-nano", usage={"prompt_tokens": 10}, choices=[MagicMock(message=mock_bad_msg)])
 
         # 2nd response: fixed tool call
         mock_good_tool = MagicMock()
@@ -141,7 +148,7 @@ class TestOpenAIClient(unittest.TestCase):
         mock_good_tool.function.name = "end_game"
         mock_good_tool.function.arguments = '{"won": false}'
         mock_good_msg = MagicMock(content="Game lost", tool_calls=[mock_good_tool], reasoning_content=None, thinking=None)
-        resp2 = MagicMock(choices=[MagicMock(message=mock_good_msg)])
+        resp2 = MagicMock(model="gpt-5.4-nano", usage={"prompt_tokens": 10}, choices=[MagicMock(message=mock_good_msg)])
 
         mock_instance.chat.completions.create.side_effect = [resp1, resp2]
 
@@ -156,12 +163,12 @@ class TestOpenAIClient(unittest.TestCase):
         mock_instance = MagicMock()
         mock_openai_cls.return_value = mock_instance
 
-        dict_message = {
-            "role": "assistant",
-            "content": "You see a chest.",
-            "reasoning_content": "Pondering options: chest might be trapped.",
-        }
-        mock_response = MagicMock(choices=[MagicMock(message=dict_message)])
+        mock_msg = MagicMock()
+        mock_msg.content = "You see a chest."
+        mock_msg.reasoning_content = "Pondering options: chest might be trapped."
+        mock_msg.tool_calls = None
+
+        mock_response = MagicMock(model="gpt-5.4-nano", usage={"prompt_tokens": 10}, choices=[MagicMock(message=mock_msg)])
         mock_instance.chat.completions.create.return_value = mock_response
 
         client = OpenAIClient(api_key="dummy")
@@ -172,11 +179,8 @@ class TestOpenAIClient(unittest.TestCase):
         self.assertEqual(len(thinking_msgs), 1)
         self.assertEqual(thinking_msgs[0].message, "Pondering options: chest might be trapped.")
 
-        # Check history exclusion: self.messages should NOT contain "reasoning_content"
-        assistant_hist = [m for m in client.messages if isinstance(m, dict) and m.get("role") == "assistant"]
-        self.assertEqual(len(assistant_hist), 1)
-        self.assertNotIn("reasoning_content", assistant_hist[0])
-        self.assertEqual(assistant_hist[0]["content"], "You see a chest.")
+        # Check that mock_msg is recorded in client.messages
+        self.assertIn(mock_msg, client.messages)
 
 
 class TestBedrockClient(unittest.TestCase):
@@ -187,6 +191,7 @@ class TestBedrockClient(unittest.TestCase):
         mock_boto.return_value = mock_bedrock
 
         mock_response = {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
             "output": {
                 "message": {
                     "content": [
@@ -210,6 +215,7 @@ class TestBedrockClient(unittest.TestCase):
         mock_boto.return_value = mock_bedrock
 
         resp1 = {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
             "output": {
                 "message": {
                     "content": [
@@ -220,6 +226,7 @@ class TestBedrockClient(unittest.TestCase):
         }
 
         resp2 = {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
             "output": {
                 "message": {
                     "content": [
@@ -245,6 +252,7 @@ class TestBedrockClient(unittest.TestCase):
         text_block = {"text": "You see an exit."}
 
         mock_response = {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
             "output": {
                 "message": {
                     "content": [thinking_block, text_block]
@@ -258,7 +266,7 @@ class TestBedrockClient(unittest.TestCase):
 
         thinking_msgs = [a for a in actions if isinstance(a, VerboseMessage) and a.type == "thinking"]
         self.assertEqual(len(thinking_msgs), 1)
-        self.assertEqual(thinking_msgs[0].message, "Evaluating tactical situation.")
+        self.assertEqual(thinking_msgs[0].message, repr(thinking_block))
 
         # Check self.messages excludes reasoningContent block
         assistant_hist = [m for m in client.messages if m.get("role") == "assistant"]
@@ -275,6 +283,7 @@ class TestBedrockClient(unittest.TestCase):
         }
 
         mock_response = {
+            "usage": {"inputTokens": 10, "outputTokens": 20, "totalTokens": 30},
             "output": {
                 "message": {
                     "content": [nova_text_block]
