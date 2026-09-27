@@ -6,9 +6,9 @@ Your goal is to guide the player through an engaging story based on their choice
 Rules:
 1. Provide vivid, evocative narrative descriptions to the player.
 2. If the game reaches a definitive victory or defeat condition:
+   - Describe why the game ended and what happened.
    - You MUST invoke the `end_game` tool with `won` set to true (if player won) or false (if player lost).
-   - In a separate narrative message, describe why the game ended and what happened.
-3. Keep turns concise and wait for player input unless the game has ended."""
+3. Keep turns concise (1-2 sentences)."""
 
 TOOLS = [
     {

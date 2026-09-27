@@ -27,7 +27,7 @@ class EndGame:
     """Represents an invocation of the end_game tool when the game is won or lost."""
 
     def __init__(self, won: bool):
-        self.won = bool(won)
+        self.won = won
 
 
 def parse_tool_action(fn_name: str, args: Any) -> Any:

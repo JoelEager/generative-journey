@@ -35,7 +35,7 @@ def main(provider, model, verbose):
 
     click.echo(f"Welcome to Generative Journey! ({client})\n")
 
-    goal = click.prompt("What is your goal for this adventure?", default="Find the hidden treasure")
+    goal = click.prompt("What is your destination?", default="The legendary city of Atlantis")
     transport = click.prompt("How do you intend to get there?", default="On foot")
     ai_prompt.current_prompt = ai_prompt.intro_prompt(goal, transport)
 
@@ -62,7 +62,7 @@ def main(provider, model, verbose):
         if game_over:
             break
 
-        ai_prompt.current_prompt = click.prompt("Your action")
+        ai_prompt.current_prompt = click.prompt(">", prompt_suffix=" ")
 
 
 if __name__ == "__main__":

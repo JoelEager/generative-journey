@@ -1,5 +1,5 @@
 # Generative Journey
-Text-based adventure game with generative AI storytelling played in a terminal. Includes a modular AI provider interface supporting both cloud and local options. Designed as a prototyping platform for comparing the storytelling skills of different models and iterating on mechanics to use with them. Developed in part via [Google Jules](https://jules.google.com/).
+Simple text-based adventure game using generative AI storytelling and played in a terminal. More of a proof of concept for comparing different models and iterating on prompting strategies then a fully fledged game. Includes a modular AI provider interface supporting both cloud and local options. Developed in part via [Google Jules](https://jules.google.com/).
 
 ## Usage
 First, install the package and activate a virtual environment for it (as documented in the setup section below). Then start a game with:
