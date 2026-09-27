@@ -51,11 +51,11 @@ class OpenAIClient(BaseAIClient):
         ]
 
     def _call_model(self, formatted_tools: Any) -> Any:
+        messages = [{"role": "system", "content": ai_prompt.SYSTEM_PROMPT}] + self.messages
         kwargs = {
             "model": self.model,
             "max_tokens": 1024,
-            "system": ai_prompt.SYSTEM_PROMPT,
-            "messages": self.messages,
+            "messages": messages,
             "tools": formatted_tools,
         }
         return self.client.chat.completions.create(**kwargs)

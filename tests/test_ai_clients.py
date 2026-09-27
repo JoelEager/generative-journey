@@ -94,6 +94,13 @@ class TestOpenAIClient(unittest.TestCase):
         self.assertIsInstance(actions[0], NarrativeMessage)
         self.assertEqual(actions[0].message, "You awaken in a dark room.")
 
+        # Verify system message in chat completions call
+        mock_instance.chat.completions.create.assert_called_once()
+        call_kwargs = mock_instance.chat.completions.create.call_args.kwargs
+        self.assertIn("messages", call_kwargs)
+        self.assertEqual(call_kwargs["messages"][0], {"role": "system", "content": ai_prompt.SYSTEM_PROMPT})
+        self.assertNotIn("system", call_kwargs)
+
     @patch("openai.OpenAI")
     def test_openai_generate_actions_tool_call(self, mock_openai_cls):
         mock_instance = MagicMock()
