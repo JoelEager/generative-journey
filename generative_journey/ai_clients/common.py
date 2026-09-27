@@ -5,6 +5,7 @@ from typing import List, Optional, Any, Tuple
 from .. import ai_prompt
 
 MAX_INVOCATIONS = 3
+MAX_TOKENS = 1024
 
 
 class BaseAIClient(ABC):

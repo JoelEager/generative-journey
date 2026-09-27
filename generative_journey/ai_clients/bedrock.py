@@ -2,7 +2,7 @@
 import re
 from typing import List, Any, Optional
 
-from .common import BaseAIClient
+from .common import MAX_TOKENS, BaseAIClient
 from .. import ai_prompt
 from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
@@ -41,7 +41,7 @@ class BedrockClient(BaseAIClient):
     def _call_model(self, formatted_tools):
         return self.client.converse(
             modelId=self.model,
-            inferenceConfig={"maxTokens": 1024},
+            inferenceConfig={"maxTokens": MAX_TOKENS},
             system=[{"text": ai_prompt.SYSTEM_PROMPT}],
             toolConfig=formatted_tools,
             messages=self.messages,
