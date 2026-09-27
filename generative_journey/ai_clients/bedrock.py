@@ -59,7 +59,9 @@ class BedrockClient(BaseAIClient):
         content_blocks = response.get("output", {}).get("message", {}).get("content", [])
         history_blocks = []
         tool_results = []
-        actions = []
+        actions = [
+            VerboseMessage(f"{response['usage']}", type="usage")
+        ]
         has_invalid_tool = False
 
         for block in content_blocks:
