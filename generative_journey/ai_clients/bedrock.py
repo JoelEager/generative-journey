@@ -64,23 +64,7 @@ class BedrockClient(BaseAIClient):
         has_invalid_tool = False
 
         for block in content_blocks:
-            if "reasoningContent" in block:
-                rc = block["reasoningContent"]
-                thinking_text = ""
-                if isinstance(rc, dict):
-                    if "reasoningText" in rc and isinstance(rc["reasoningText"], dict) and "text" in rc["reasoningText"]:
-                        thinking_text = rc["reasoningText"]["text"]
-                    elif "text" in rc:
-                        thinking_text = rc["text"]
-                    else:
-                        thinking_text = str(rc)
-                elif isinstance(rc, str):
-                    thinking_text = rc
-                else:
-                    thinking_text = str(rc)
-                if thinking_text:
-                    actions.append(VerboseMessage(thinking_text, type="thinking"))
-            elif block.get("text"):
+            if block.get("text"):
                 raw_text = block["text"]
                 for match in THINKING_PATTERN.finditer(raw_text):
                     thinking_str = match.group(1).strip()

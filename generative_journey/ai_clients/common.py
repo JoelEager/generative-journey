@@ -40,7 +40,7 @@ class BaseAIClient(ABC):
     @abstractmethod
     def _parse_response(self, response: Any) -> Tuple[List[Any], bool]:
         """
-        Parse provider response into actions and history entries.
+        Parse provider response into actions and update messages history.
 
         Returns a tuple of:
           - actions: List of action instances from this invocation (NarrativeMessage, EndGame, etc.)
