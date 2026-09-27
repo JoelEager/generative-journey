@@ -1,10 +1,10 @@
 """AI client using Anthropic API."""
-from typing import List, Any
+from typing import List, Any, Tuple
 from os import getenv
 
-from .common import BaseAIClient, MAX_INVOCATIONS
+from .common import BaseAIClient
 from .. import ai_prompt
-from ..ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
 
 class AnthropicClient(BaseAIClient):
@@ -15,85 +15,66 @@ class AnthropicClient(BaseAIClient):
         api_key = getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable is not set.")
-        
+
         # Lazy import to avoid unnecessary dependency if this client is not used
         import anthropic
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.messages: List[dict] = []
 
-    def generate_actions(self) -> List[Any]:
-        self.messages.append({"role": "user", "content": ai_prompt.current_prompt})
-
-        tools = [
+    def _format_tools(self, tools: List[dict]) -> Any:
+        return [
             {
                 "name": tool["name"],
                 "description": tool["description"],
                 "input_schema": tool["parameters"],
             }
-            for tool in ai_prompt.TOOLS
+            for tool in tools
         ]
 
-        actions: List[Any] = []
+    def _call_model(self, formatted_tools: Any) -> Any:
+        kwargs = {
+            "model": self.model,
+            "max_tokens": 1024,
+            "system": ai_prompt.SYSTEM_PROMPT,
+            "tools": formatted_tools,
+            "messages": self.messages,
+        }
+        return self.client.messages.create(**kwargs)
 
-        for _ in range(MAX_INVOCATIONS):
-            kwargs = {
-                "model": self.model,
-                "max_tokens": 1024,
-                "system": ai_prompt.SYSTEM_PROMPT,
-                "tools": tools,
-                "messages": self.messages,
-            }
+    def _parse_response(self, response: Any) -> Tuple[List[Any], List[Any], bool, List[Any], List[Any]]:
+        turn_actions = []
+        verbose_actions = []
+        has_invalid_tool = False
+        tool_results = []
 
-            response = self.client.messages.create(**kwargs)
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                if block.text:
+                    turn_actions.append(NarrativeMessage(block.text))
+            elif getattr(block, "type", None) == "tool_use":
+                fn_name = block.name
+                args = block.input
+                try:
+                    action = parse_tool_action(fn_name, args)
+                    turn_actions.append(action)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Success",
+                    })
+                except Exception as err:
+                    has_invalid_tool = True
+                    error_msg = str(err)
+                    verbose_actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": f"Error: {error_msg}. Please try again with valid parameters.",
+                        "is_error": True,
+                    })
+            else:
+                verbose_actions.append(VerboseMessage(repr(block), type="unknown"))
 
-            turn_actions = []
-            has_invalid_tool = False
-            tool_results = []
+        assistant_msgs = [{"role": "assistant", "content": response.content}]
+        retry_msgs = [{"role": "user", "content": tool_results}] if tool_results else []
 
-            for block in response.content:
-                if getattr(block, "type", None) == "text":
-                    if block.text:
-                        turn_actions.append(NarrativeMessage(block.text))
-                elif getattr(block, "type", None) == "tool_use":
-                    fn_name = block.name
-                    args = block.input
-                    try:
-                        if not isinstance(args, dict) or "won" not in args or not isinstance(args["won"], bool):
-                            raise ValueError(f"Invalid arguments for {fn_name}: {args}")
-                        if fn_name == "end_game":
-                            turn_actions.append(EndGame(won=args["won"]))
-                        else:
-                            raise ValueError(f"Unknown tool name: {fn_name}")
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": "Success",
-                        })
-                    except Exception as err:
-                        has_invalid_tool = True
-                        error_msg = str(err)
-                        actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": f"Error: {error_msg}. Please try again with valid parameters.",
-                            "is_error": True,
-                        })
-                else:
-                    actions.append(VerboseMessage(repr(block), type="unknown"))
-
-            # Record assistant turn in message history
-            self.messages.append({"role": "assistant", "content": response.content})
-
-            if has_invalid_tool:
-                # Append tool result errors to message history as user message for retry
-                self.messages.append({"role": "user", "content": tool_results})
-                continue
-
-            if tool_results:
-                # Add successful tool results to message history as user message for next turn
-                self.messages.append({"role": "user", "content": tool_results})
-
-            actions.extend(turn_actions)
-        
-        return actions
+        return turn_actions, verbose_actions, has_invalid_tool, assistant_msgs, retry_msgs

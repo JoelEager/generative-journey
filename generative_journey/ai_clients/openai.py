@@ -1,11 +1,11 @@
 """AI client using OpenAI API SDK."""
 import json
-from typing import List, Any
+from typing import List, Any, Tuple
 from os import getenv
 
-from .common import BaseAIClient, MAX_INVOCATIONS
+from .common import BaseAIClient
 from .. import ai_prompt
-from ..ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
 
 class OpenAIClient(BaseAIClient):
@@ -34,7 +34,6 @@ class OpenAIClient(BaseAIClient):
         # Lazy import to avoid unnecessary dependency if this client is not used
         import openai
         self.client = openai.OpenAI(**kwargs)
-        self.messages: List[dict] = []
 
     def __repr__(self) -> str:
         repr_str = super().__repr__()
@@ -42,72 +41,60 @@ class OpenAIClient(BaseAIClient):
             repr_str += f", url: {self.base_url}"
         return repr_str
 
-    def generate_actions(self) -> List[Any]:
-        self.messages.append({"role": "user", "content": ai_prompt.current_prompt})
-
-        tools = [
+    def _format_tools(self, tools: List[dict]) -> Any:
+        return [
             {
                 "type": "function",
                 "function": tool,
             }
-            for tool in ai_prompt.TOOLS
+            for tool in tools
         ]
 
-        actions: List[Any] = []
+    def _call_model(self, formatted_tools: Any) -> Any:
+        kwargs = {
+            "model": self.model,
+            "max_tokens": 1024,
+            "system": ai_prompt.SYSTEM_PROMPT,
+            "messages": self.messages,
+            "tools": formatted_tools,
+        }
+        return self.client.chat.completions.create(**kwargs)
 
-        for _ in range(MAX_INVOCATIONS):
-            kwargs = {
-                "model": self.model,
-                "max_tokens": 1024,
-                "system": ai_prompt.SYSTEM_PROMPT,
-                "messages": self.messages,
-                "tools": tools,
-            }
+    def _parse_response(self, response: Any) -> Tuple[List[Any], List[Any], bool, List[Any], List[Any]]:
+        turn_actions = []
+        verbose_actions = []
+        has_invalid_tool = False
+        assistant_msgs = []
+        retry_msgs = []
 
-            response = self.client.chat.completions.create(**kwargs)
+        for entry in response.choices:
+            message = entry.message
+            assistant_msgs.append(message)
 
-            turn_actions = []
-            has_invalid_tool = False
-            tool_errors = []
+            if message.content:
+                turn_actions.append(NarrativeMessage(message.content))
 
-            for entry in response.choices:
-                message = entry.message
-
-                if message.content:
-                    turn_actions.append(NarrativeMessage(message.content))
-
-                if message.tool_calls:
-                    for tool_call in message.tool_calls:
-                        fn_name = tool_call.function.name
-                        raw_args = tool_call.function.arguments
-                        try:
-                            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-                            if not isinstance(args, dict) or "won" not in args or not isinstance(args["won"], bool):
-                                raise ValueError(f"Invalid arguments for {fn_name}: {raw_args}")
-                            if fn_name == "end_game":
-                                turn_actions.append(EndGame(won=args["won"]))
-                            else:
-                                raise ValueError(f"Unknown tool name: {fn_name}")
-                        except Exception as err:
-                            has_invalid_tool = True
-                            error_msg = str(err)
-                            tool_errors.append((tool_call, error_msg))
-                            actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={raw_args}: {error_msg}", type="warn"))
+            if message.tool_calls:
+                tool_errors = []
+                for tool_call in message.tool_calls:
+                    fn_name = tool_call.function.name
+                    raw_args = tool_call.function.arguments
+                    try:
+                        args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                        action = parse_tool_action(fn_name, args)
+                        turn_actions.append(action)
+                    except Exception as err:
+                        has_invalid_tool = True
+                        error_msg = str(err)
+                        tool_errors.append((tool_call, error_msg))
+                        verbose_actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={raw_args}: {error_msg}", type="warn"))
 
                 if has_invalid_tool:
-                    # Add assistant message and tool error responses to conversation history so AI can retry
-                    self.messages.append(message)
                     for tool_call, error_msg in tool_errors:
-                        self.messages.append({
+                        retry_msgs.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
                             "content": f"Error: {error_msg}. Please try again with valid parameters."
                         })
-                    continue
 
-                # Successful invocation
-                self.messages.append(message)
-            
-            actions.extend(turn_actions)
-        
-        return actions
+        return turn_actions, verbose_actions, has_invalid_tool, assistant_msgs, retry_msgs

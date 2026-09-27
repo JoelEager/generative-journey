@@ -1,9 +1,9 @@
 """AI client using AWS Bedrock runtime (boto3) Converse API."""
-from typing import List, Any
+from typing import List, Any, Tuple
 
-from .common import BaseAIClient, MAX_INVOCATIONS
+from .common import BaseAIClient
 from .. import ai_prompt
-from ..ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
 
 class BedrockClient(BaseAIClient):
@@ -15,12 +15,14 @@ class BedrockClient(BaseAIClient):
         # Lazy import to avoid unnecessary dependency if this client is not used
         import boto3
         self.client = boto3.client("bedrock-runtime")
-        self.messages: List[dict] = []
 
-    def generate_actions(self) -> List[Any]:
-        self.messages.append({"role": "user", "content": [{"text": ai_prompt.current_prompt}]})
+    def format_user_message(self, content: Any) -> dict:
+        if isinstance(content, str):
+            return {"role": "user", "content": [{"text": content}]}
+        return {"role": "user", "content": content}
 
-        tool_config = {
+    def _format_tools(self, tools: List[dict]) -> Any:
+        return {
             "tools": [
                 {
                     "toolSpec": {
@@ -29,78 +31,61 @@ class BedrockClient(BaseAIClient):
                         "inputSchema": {"json": tool["parameters"]},
                     }
                 }
-                for tool in ai_prompt.TOOLS
+                for tool in tools
             ]
         }
 
-        actions: List[Any] = []
+    def _call_model(self, formatted_tools: Any) -> Any:
+        kwargs = {
+            "modelId": self.model,
+            "inferenceConfig": {"maxTokens": 1024},
+            "system": [{"text": ai_prompt.SYSTEM_PROMPT}],
+            "toolConfig": formatted_tools,
+            "messages": self.messages,
+        }
+        return self.client.converse(**kwargs)
 
-        for _ in range(MAX_INVOCATIONS):
-            kwargs = {
-                "modelId": self.model,
-                "inferenceConfig": {"maxTokens": 1024},
-                "system": [{"text": ai_prompt.SYSTEM_PROMPT}],
-                "toolConfig": tool_config,
-                "messages": self.messages,
-            }
+    def _parse_response(self, response: Any) -> Tuple[List[Any], List[Any], bool, List[Any], List[Any]]:
+        content_blocks = response.get("output", {}).get("message", {}).get("content", [])
+        turn_actions = []
+        verbose_actions = []
+        has_invalid_tool = False
+        tool_results = []
 
-            response = self.client.converse(**kwargs)
-            content_blocks = response.get("output", {}).get("message", {}).get("content", [])
+        for block in content_blocks:
+            if "text" in block:
+                if block["text"]:
+                    turn_actions.append(NarrativeMessage(block["text"]))
+            elif "toolUse" in block:
+                tool_use = block["toolUse"]
+                tool_use_id = tool_use.get("toolUseId")
+                fn_name = tool_use.get("name")
+                args = tool_use.get("input", {})
+                try:
+                    action = parse_tool_action(fn_name, args)
+                    turn_actions.append(action)
+                    tool_results.append({
+                        "toolResult": {
+                            "toolUseId": tool_use_id,
+                            "content": [{"text": "Success"}],
+                            "status": "success",
+                        }
+                    })
+                except Exception as err:
+                    has_invalid_tool = True
+                    error_msg = str(err)
+                    verbose_actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
+                    tool_results.append({
+                        "toolResult": {
+                            "toolUseId": tool_use_id,
+                            "content": [{"text": f"Error: {error_msg}. Please try again with valid parameters."}],
+                            "status": "error",
+                        }
+                    })
+            else:
+                verbose_actions.append(VerboseMessage(repr(block), type="unknown"))
 
-            turn_actions = []
-            has_invalid_tool = False
-            tool_results = []
+        assistant_msgs = [{"role": "assistant", "content": content_blocks}]
+        retry_msgs = [{"role": "user", "content": tool_results}] if tool_results else []
 
-            for block in content_blocks:
-                if "text" in block:
-                    if block["text"]:
-                        turn_actions.append(NarrativeMessage(block["text"]))
-                elif "toolUse" in block:
-                    tool_use = block["toolUse"]
-                    tool_use_id = tool_use.get("toolUseId")
-                    fn_name = tool_use.get("name")
-                    args = tool_use.get("input", {})
-                    try:
-                        if not isinstance(args, dict) or "won" not in args or not isinstance(args["won"], bool):
-                            raise ValueError(f"Invalid arguments for {fn_name}: {args}")
-                        if fn_name == "end_game":
-                            turn_actions.append(EndGame(won=args["won"]))
-                        else:
-                            raise ValueError(f"Unknown tool name: {fn_name}")
-                        tool_results.append({
-                            "toolResult": {
-                                "toolUseId": tool_use_id,
-                                "content": [{"text": "Success"}],
-                                "status": "success",
-                            }
-                        })
-                    except Exception as err:
-                        has_invalid_tool = True
-                        error_msg = str(err)
-                        actions.append(VerboseMessage(f"Failed tool call '{fn_name}' args={args}: {error_msg}", type="warn"))
-                        tool_results.append({
-                            "toolResult": {
-                                "toolUseId": tool_use_id,
-                                "content": [{"text": f"Error: {error_msg}. Please try again with valid parameters."}],
-                                "status": "error",
-                            }
-                        })
-                else:
-                    actions.append(VerboseMessage(repr(block), type="unknown"))
-
-            # Record assistant turn in message history
-            self.messages.append({"role": "assistant", "content": content_blocks})
-
-            if has_invalid_tool:
-                # Append tool result errors to message history as user message for retry
-                self.messages.append({"role": "user", "content": tool_results})
-                continue
-
-            if tool_results:
-                # Add successful tool results to message history as user message for next turn
-                self.messages.append({"role": "user", "content": tool_results})
-
-            actions.extend(turn_actions)
-            break  # Exit the loop after a successful turn without invalid tools
-        
-        return actions
+        return turn_actions, verbose_actions, has_invalid_tool, assistant_msgs, retry_msgs

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from generative_journey import ai_prompt
-from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame
+from generative_journey.ai_actions import NarrativeMessage, VerboseMessage, EndGame, parse_tool_action
 from generative_journey.ai_clients import BaseAIClient, get_ai_client
 from generative_journey.ai_clients.anthropic import AnthropicClient
 from generative_journey.ai_clients.bedrock import BedrockClient
@@ -32,9 +32,67 @@ class TestAIActionsAndPrompt(unittest.TestCase):
         end_loss = EndGame(won=False)
         self.assertFalse(end_loss.won)
 
+    def test_parse_tool_action_valid(self):
+        action = parse_tool_action("end_game", {"won": True})
+        self.assertIsInstance(action, EndGame)
+        self.assertTrue(action.won)
+
+        action_loss = parse_tool_action("end_game", {"won": False})
+        self.assertIsInstance(action_loss, EndGame)
+        self.assertFalse(action_loss.won)
+
+    def test_parse_tool_action_invalid_args(self):
+        with self.assertRaises(ValueError):
+            parse_tool_action("end_game", "not_a_dict")
+
+        with self.assertRaises(ValueError):
+            parse_tool_action("end_game", {})
+
+        with self.assertRaises(ValueError):
+            parse_tool_action("end_game", {"won": "yes"})
+
+    def test_parse_tool_action_unknown_tool(self):
+        with self.assertRaises(ValueError):
+            parse_tool_action("unknown_tool", {"won": True})
+
+
+class DummyAIClient(BaseAIClient):
+    provider_name = "dummy"
+
+    def _format_tools(self, tools):
+        return tools
+
+    def _call_model(self, formatted_tools):
+        return None
+
+    def _parse_response(self, response):
+        return [], [], False, [], []
+
+
+class TestBaseAIClient(unittest.TestCase):
+
+    def test_base_client_init(self):
+        client = DummyAIClient(model="dummy-model")
+        self.assertEqual(client.model, "dummy-model")
+        self.assertEqual(client.messages, [])
+        self.assertEqual(str(client), "provider: dummy, model: dummy-model")
+
+    def test_format_user_message(self):
+        client = DummyAIClient()
+        formatted = client.format_user_message("Hello world")
+        self.assertEqual(formatted, {"role": "user", "content": "Hello world"})
+
+    def test_append_user_prompt(self):
+        client = DummyAIClient()
+        ai_prompt.current_prompt = "Test prompt content"
+        client.append_user_prompt()
+        self.assertEqual(len(client.messages), 1)
+        self.assertEqual(client.messages[0], {"role": "user", "content": "Test prompt content"})
+
 
 class TestAIClients(unittest.TestCase):
 
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
     @patch("openai.OpenAI")
     @patch("anthropic.Anthropic")
     @patch("boto3.client")
@@ -43,7 +101,7 @@ class TestAIClients(unittest.TestCase):
         self.assertIsInstance(bedrock, BedrockClient)
         self.assertEqual(bedrock.model, "amazon.nova-pro-v1:0")
 
-        anthropic = get_ai_client("anthropic", model="custom-claude", api_key="dummy")
+        anthropic = get_ai_client("anthropic", model="custom-claude")
         self.assertIsInstance(anthropic, AnthropicClient)
         self.assertEqual(anthropic.model, "custom-claude")
 
@@ -70,7 +128,7 @@ class TestAIClients(unittest.TestCase):
         mock_instance.chat.completions.create.return_value = mock_response
 
         client = OpenAIClient(api_key="dummy")
-        ai_prompt.PLAYER_MESSAGE = "Look around"
+        ai_prompt.current_prompt = "Look around"
         actions = client.generate_actions()
 
         self.assertEqual(len(actions), 1)
@@ -131,6 +189,7 @@ class TestAIClients(unittest.TestCase):
         self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "warn" for a in actions))
         self.assertTrue(any(isinstance(a, EndGame) and not a.won for a in actions))
 
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
     @patch("anthropic.Anthropic")
     def test_anthropic_generate_actions(self, mock_anthropic_cls):
         mock_instance = MagicMock()
@@ -150,13 +209,43 @@ class TestAIClients(unittest.TestCase):
         mock_response.content = [mock_text_block, mock_tool_block]
         mock_instance.messages.create.return_value = mock_response
 
-        client = AnthropicClient(api_key="dummy")
+        client = AnthropicClient()
         actions = client.generate_actions()
 
         self.assertEqual(len(actions), 2)
         self.assertIsInstance(actions[0], NarrativeMessage)
         self.assertIsInstance(actions[1], EndGame)
         self.assertTrue(actions[1].won)
+
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "dummy_anthropic_key"})
+    @patch("anthropic.Anthropic")
+    def test_anthropic_generate_actions_invalid_tool_retry(self, mock_anthropic_cls):
+        mock_instance = MagicMock()
+        mock_anthropic_cls.return_value = mock_instance
+
+        # 1st response: invalid arguments
+        mock_bad_tool = MagicMock()
+        mock_bad_tool.type = "tool_use"
+        mock_bad_tool.id = "tool_1"
+        mock_bad_tool.name = "end_game"
+        mock_bad_tool.input = {"invalid_param": 123}
+        resp1 = MagicMock(content=[mock_bad_tool])
+
+        # 2nd response: valid tool call
+        mock_good_tool = MagicMock()
+        mock_good_tool.type = "tool_use"
+        mock_good_tool.id = "tool_2"
+        mock_good_tool.name = "end_game"
+        mock_good_tool.input = {"won": False}
+        resp2 = MagicMock(content=[mock_good_tool])
+
+        mock_instance.messages.create.side_effect = [resp1, resp2]
+
+        client = AnthropicClient()
+        actions = client.generate_actions()
+
+        self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "warn" for a in actions))
+        self.assertTrue(any(isinstance(a, EndGame) and not a.won for a in actions))
 
     @patch("boto3.client")
     def test_bedrock_generate_actions(self, mock_boto):
@@ -183,6 +272,38 @@ class TestAIClients(unittest.TestCase):
         self.assertIsInstance(actions[1], EndGame)
         self.assertTrue(actions[1].won)
 
+    @patch("boto3.client")
+    def test_bedrock_generate_actions_invalid_tool_retry(self, mock_boto):
+        mock_bedrock = MagicMock()
+        mock_boto.return_value = mock_bedrock
+
+        resp1 = {
+            "output": {
+                "message": {
+                    "content": [
+                        {"toolUse": {"toolUseId": "tu_1", "name": "end_game", "input": {"bad_arg": 1}}}
+                    ]
+                }
+            }
+        }
+
+        resp2 = {
+            "output": {
+                "message": {
+                    "content": [
+                        {"toolUse": {"toolUseId": "tu_2", "name": "end_game", "input": {"won": False}}}
+                    ]
+                }
+            }
+        }
+        mock_bedrock.converse.side_effect = [resp1, resp2]
+
+        client = BedrockClient()
+        actions = client.generate_actions()
+
+        self.assertTrue(any(isinstance(a, VerboseMessage) and a.type == "warn" for a in actions))
+        self.assertTrue(any(isinstance(a, EndGame) and not a.won for a in actions))
+
 
 class TestCLI(unittest.TestCase):
 
@@ -200,12 +321,12 @@ class TestCLI(unittest.TestCase):
         mock_get_ai_client.return_value = mock_client
 
         runner = CliRunner()
-        result = runner.invoke(main, ["openai"], input="go north\n")
+        result = runner.invoke(main, ["openai"], input="\n\ngo north\n")
 
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Welcome to the labyrinth.", result.output)
         self.assertIn("A dragon devours you.", result.output)
-        self.assertIn("*** GAME OVER! You lost the game! ***", result.output)
+        self.assertIn("You lost the game!", result.output)
 
     @patch("generative_journey.cli.get_ai_client")
     def test_cli_verbose_option(self, mock_get_ai_client):
@@ -221,12 +342,12 @@ class TestCLI(unittest.TestCase):
         mock_get_ai_client.return_value = mock_client
 
         runner = CliRunner()
-        result = runner.invoke(main, ["local", "-v"])
+        result = runner.invoke(main, ["local", "-v"], input="\n\n")
 
         self.assertEqual(result.exit_code, 0)
         self.assertIn("thinking: Thinking deeply...", result.output)
         self.assertIn("You see a shiny key.", result.output)
-        self.assertIn("*** VICTORY! You won the game! ***", result.output)
+        self.assertIn("You won the game!", result.output)
 
 
 if __name__ == "__main__":
