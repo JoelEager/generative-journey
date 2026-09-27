@@ -93,7 +93,6 @@ class BedrockClient(BaseAIClient):
                     tool_results.append(self._format_tool_result(tool_use_id, "error", f"Error: {error_msg}. Please try again with valid parameters."))
             else:
                 actions.append(VerboseMessage(repr(block), type="unknown"))
-                history_blocks.append(block)
 
         if history_blocks:
             self.messages.append({"role": "assistant", "content": history_blocks})
