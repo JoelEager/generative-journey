@@ -3,7 +3,7 @@ import json
 from typing import List, Any, Tuple, Optional
 from os import getenv
 
-from .common import BaseAIClient
+from .common import MAX_TOKENS, BaseAIClient
 from .. import ai_prompt
 from ..ai_actions import NarrativeMessage, VerboseMessage, parse_tool_action
 
@@ -51,11 +51,11 @@ class OpenAIClient(BaseAIClient):
         ]
 
     def _call_model(self, formatted_tools: Any) -> Any:
+        messages = [{"role": "system", "content": ai_prompt.SYSTEM_PROMPT}] + self.messages
         kwargs = {
             "model": self.model,
-            "max_tokens": 1024,
-            "system": ai_prompt.SYSTEM_PROMPT,
-            "messages": self.messages,
+            "max_tokens": MAX_TOKENS,
+            "messages": messages,
             "tools": formatted_tools,
         }
         return self.client.chat.completions.create(**kwargs)
